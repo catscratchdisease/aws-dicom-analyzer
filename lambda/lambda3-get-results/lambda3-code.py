@@ -67,10 +67,18 @@ def lambda_handler(event, context):
         # Convert Decimals to floats for JSON
         results = convert_decimals_to_floats(item.get('results'))
         
+        # Convert flag Decimal to int if present
+        flag_val = item.get('flag')
+        if isinstance(flag_val, Decimal):
+            flag_out = int(flag_val)
+        else:
+            flag_out = flag_val
+
         response_body = {
             'status': item['status'],
             'results': results,
             'imageUrl': item.get('imageUrl'),
+            'flag': flag_out,
             'error': item.get('error')
         }
         

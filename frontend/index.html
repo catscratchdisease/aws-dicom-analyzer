@@ -346,10 +346,10 @@
                 
                 // Step 3: Poll for results
                 showStatus('Analyzing image with AWS Rekognition...', 'processing');
-                const results = await pollForResults(uploadData.jobId);
+                const resp = await pollForResults(uploadData.jobId);
                 
-                // Step 4: Display results
-                displayResults(results);
+                // Step 4: Display results (pass full response)
+                displayResults(resp);
                 
             } catch (error) {
                 console.error('Error:', error);
@@ -415,7 +415,7 @@
                 const data = await response.json();
                 
                 if (data.status === 'complete') {
-                    return data.results;
+                    return data; // include results and flag
                 } else if (data.status === 'error') {
                     throw new Error(data.error || 'Processing failed');
                 }
@@ -426,19 +426,36 @@
         
         function displayResults(results) {
             showStatus('Analysis complete!', 'complete');
-            
-            // Don't override DICOM viewer if it's already showing
-            // (imageUrl from server is only for backup/reference)
-            
-            // Check if it's a DICOM file without results
-            if (results.message) {
-                detectionsList.innerHTML = `<div class="detection-item" style="background: #fff3cd; border-left: 4px solid #ffc107;">
-                    <span style="color: #856404;">${results.message}</span>
+
+            // Support both legacy shape (results object) and new shape { status, results, flag, imageUrl }
+            const resp = results && results.results !== undefined ? results : { results };
+            const resultsObj = resp.results || resp;
+            const flag = resp.flag;
+
+            // Clear existing list
+            detectionsList.innerHTML = '';
+
+            // Display classifier flag if present
+            if (flag !== undefined && flag !== null) {
+                const boolText = (flag === 1 || flag === '1' || flag === true) ? 'true' : 'false';
+                detectionsList.innerHTML += `<div class="detection-item" style="background: #e8f5e9; border-left: 4px solid #4caf50;">
+                    <span class="detection-label">Classifier flag</span>
+                    <span class="detection-confidence">${boolText}</span>
                 </div>`;
-            } else if (!results || !results.Labels || results.Labels.length === 0) {
-                detectionsList.innerHTML = '<p>No objects detected</p>';
+            }
+
+            // Check if it's a DICOM file without results
+            if (resultsObj && resultsObj.message) {
+                detectionsList.innerHTML += `<div class="detection-item" style="background: #fff3cd; border-left: 4px solid #ffc107;">
+                    <span style="color: #856404;">${resultsObj.message}</span>
+                </div>`;
+            } else if (!resultsObj || !resultsObj.Labels || resultsObj.Labels.length === 0) {
+                if (!detectionsList.innerHTML) {
+                    detectionsList.innerHTML = '<p>No objects detected</p>';
+                }
             } else {
-                detectionsList.innerHTML = results.Labels
+                // Append label list after any flag element
+                const labelsHtml = resultsObj.Labels
                     .sort((a, b) => b.Confidence - a.Confidence)
                     .map(label => `
                         <div class="detection-item">
@@ -446,8 +463,10 @@
                             <span class="detection-confidence">${label.Confidence.toFixed(1)}%</span>
                         </div>
                     `).join('');
+
+                detectionsList.innerHTML += labelsHtml;
             }
-            
+
             resultsDiv.style.display = 'block';
         }
         

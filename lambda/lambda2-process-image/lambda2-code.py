@@ -88,6 +88,53 @@ def convert_dicom_to_jpeg(dicom_data):
     
     return output.getvalue()
 
+
+def resize_and_crop_to_png_bytes(image_bytes, target_size=(1024, 1024), crop_size=(512, 512)):
+    """Resize to target_size, then crop to crop_size keeping the upper half and middle horizontally.
+
+    Returns PNG bytes suitable for classifier input.
+    """
+    with io.BytesIO(image_bytes) as buf:
+        img = Image.open(buf).convert('RGB')
+
+        # Resize to 1024x1024
+        img = img.resize(target_size, Image.LANCZOS)
+
+        # Calculate crop box: upper half (y=0..crop_h) and centered horizontally
+        width, height = img.size
+        crop_w, crop_h = crop_size
+        left = (width - crop_w) // 2
+        upper = 0
+        right = left + crop_w
+        lower = upper + crop_h
+
+        cropped = img.crop((left, upper, right, lower))
+
+        out = io.BytesIO()
+        # Save as PNG for classifier input
+        cropped.save(out, format='PNG')
+        out.seek(0)
+        return out.getvalue()
+
+
+def run_classifier_on_png(png_bytes):
+    """Simple placeholder classifier that returns 1 or 0.
+
+    Current behavior: convert to grayscale, compute average brightness; return 1 if avg>127 else 0.
+    Replace with a real model call as needed.
+    """
+    try:
+        with io.BytesIO(png_bytes) as buf:
+            img = Image.open(buf).convert('L')
+            # Downscale for quick processing
+            img_small = img.resize((64, 64))
+            pixels = list(img_small.getdata())
+            avg = sum(pixels) / len(pixels)
+            return 1 if avg > 127 else 0
+    except Exception as e:
+        print(f"Classifier error: {e}")
+        return 0
+
 def lambda_handler(event, context):
     job_id = None
     try:
@@ -157,27 +204,49 @@ def lambda_handler(event, context):
         print(f"Rekognition found {len(response['Labels'])} labels")
         
         results = convert_floats_to_decimals(response)
-        
-        # Update DynamoDB with results and image URL
+
+        # Run classifier on the converted image (prefer converted JPEG if available)
+        try:
+            classifier_input_bytes = None
+            # If we converted from DICOM we have jpeg_data; otherwise, download the object bytes from S3
+            if is_dicom_file(key):
+                # Use the converted JPEG we already created
+                classifier_input_bytes = jpeg_data
+            else:
+                # Download original object bytes
+                obj = s3_client.get_object(Bucket=bucket, Key=rekognition_key)
+                classifier_input_bytes = obj['Body'].read()
+
+            # Convert to PNG, resize and crop
+            png_bytes = resize_and_crop_to_png_bytes(classifier_input_bytes)
+            flag_value = run_classifier_on_png(png_bytes)
+            print(f"Classifier returned flag: {flag_value}")
+        except Exception as e:
+            print(f"Classifier processing failed: {e}")
+            flag_value = 0
+
+        # Update DynamoDB with results, image URL and flag
         table = dynamodb.Table(TABLE_NAME)
-        update_expression = 'SET #status = :status, #results = :results, #updatedAt = :updatedAt'
+        update_expression = 'SET #status = :status, #results = :results, #updatedAt = :updatedAt, #flag = :flag'
         expression_names = {
             '#status': 'status',
             '#results': 'results',
-            '#updatedAt': 'updatedAt'
+            '#updatedAt': 'updatedAt',
+            '#flag': 'flag'
         }
         expression_values = {
             ':status': 'complete',
             ':results': results,
-            ':updatedAt': datetime.utcnow().isoformat()
+            ':updatedAt': datetime.utcnow().isoformat(),
+            ':flag': Decimal(str(int(flag_value)))
         }
-        
+
         # Add imageUrl if it's a DICOM
         if image_url:
             update_expression += ', #imageUrl = :imageUrl'
             expression_names['#imageUrl'] = 'imageUrl'
             expression_values[':imageUrl'] = image_url
-        
+
         table.update_item(
             Key={'jobId': job_id},
             UpdateExpression=update_expression,
