@@ -437,10 +437,12 @@
 
             // Display classifier flag if present
             if (flag !== undefined && flag !== null) {
-                const boolText = (flag === 1 || flag === '1' || flag === true) ? 'true' : 'false';
-                detectionsList.innerHTML += `<div class="detection-item" style="background: #e8f5e9; border-left: 4px solid #4caf50;">
-                    <span class="detection-label">Classifier flag</span>
-                    <span class="detection-confidence">${boolText}</span>
+                const statusText = (flag === 1 || flag === '1' || flag === true) ? 'Detected' : 'Not detected';
+                const bgColor = (flag === 1 || flag === '1' || flag === true) ? '#e8f5e9' : '#fff3e0';
+                const borderColor = (flag === 1 || flag === '1' || flag === true) ? '#4caf50' : '#ff9800';
+                detectionsList.innerHTML += `<div class="detection-item" style="background: ${bgColor}; border-left: 4px solid ${borderColor};">
+                    <span class="detection-label">Endotracheal tube</span>
+                    <span class="detection-confidence">${statusText}</span>
                 </div>`;
             }
 
