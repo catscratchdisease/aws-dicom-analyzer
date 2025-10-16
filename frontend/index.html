@@ -25,9 +25,29 @@
             background: white;
             border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 800px;
+            max-width: 1400px;
             width: 100%;
             padding: 40px;
+        }
+
+        .content-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .left-column {
+            flex: 1;
+        }
+
+        .right-column {
+            flex: 1;
+        }
+
+        @media (max-width: 768px) {
+            .content-wrapper {
+                grid-template-columns: 1fr;
+            }
         }
         
         h1 {
@@ -113,7 +133,6 @@
         }
         
         .results {
-            margin-top: 30px;
             display: none;
         }
         
@@ -182,28 +201,34 @@
 <body>
     <div class="container">
         <h1>🔍 Image Object Detection</h1>
-        
-        <div class="drop-zone" id="dropZone">
-            <div class="drop-zone-text">Drop an image here or click to upload</div>
-            <div class="drop-zone-hint">Supports JPG, PNG, GIF, DICOM (.dcm)</div>
-        </div>
-        
-        <input type="file" id="fileInput" accept="image/*,.dcm,.dicom">
-        
-        <div class="preview-container" id="previewContainer">
-            <img id="previewImage" class="preview-image" alt="Preview">
-            <div id="dicomViewer" class="preview-image" style="display: none; background: #000;"></div>
-            <div id="dicomControls" style="display: none; text-align: center; margin-top: 10px; color: #666; font-size: 14px;">
-                💡 Drag to adjust brightness/contrast • Scroll to zoom
+
+        <div class="content-wrapper">
+            <div class="left-column">
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-zone-text">Drop an image here or click to upload</div>
+                    <div class="drop-zone-hint">Supports JPG, PNG, GIF, DICOM (.dcm)</div>
+                </div>
+
+                <input type="file" id="fileInput" accept="image/*,.dcm,.dicom">
+
+                <div class="preview-container" id="previewContainer">
+                    <img id="previewImage" class="preview-image" alt="Preview">
+                    <div id="dicomViewer" class="preview-image" style="display: none; background: #000;"></div>
+                    <div id="dicomControls" style="display: none; text-align: center; margin-top: 10px; color: #666; font-size: 14px;">
+                        💡 Drag to adjust brightness/contrast • Scroll to zoom
+                    </div>
+                </div>
+
+                <div id="status"></div>
             </div>
-        </div>
-        
-        <div id="status"></div>
-        
-        <div class="results" id="results">
-            <h2>Detected Objects</h2>
-            <div id="detectionsList"></div>
-            <button class="btn-reset" onclick="reset()">Analyze Another Image</button>
+
+            <div class="right-column">
+                <div class="results" id="results">
+                    <h2>Detected Objects</h2>
+                    <div id="detectionsList"></div>
+                    <button class="btn-reset" onclick="reset()">Analyze Another Image</button>
+                </div>
+            </div>
         </div>
     </div>
 
