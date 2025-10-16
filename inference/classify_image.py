@@ -1,25 +1,57 @@
-import tensorflow as tf
-from tensorflow import keras
-import numpy as np
-from PIL import Image
-import sys
+"""Classifier wrapper for the saved Keras model.
 
-# 1. Load the saved model
-model = keras.models.load_model('../models/20250713_ett_model_30epochs_resnet_cropped.keras')
+This module exposes classify_png_bytes(png_bytes) -> int.
+It lazily loads the Keras model from ../models/20250713_ett_model_30epochs_resnet_cropped.keras.
 
-# 2. Load and preprocess the image
-img = Image.open(sys.argv[1]).resize((512,512))  # adjust size as needed
-img_array = np.array(img)
+Note: TensorFlow and the model file must be available in the Lambda environment (layer or bundled).
+"""
 
-# If grayscale, convert to RGB by stacking channels
-if img_array.ndim == 2:
-    img_array = np.stack([img_array]*3, axis=-1)
+try:
+    import numpy as np
+    from PIL import Image
+    import io
+    from tensorflow import keras
+    TF_AVAILABLE = True
+except Exception as e:
+    TF_AVAILABLE = False
+    _import_error = e
 
-# Add batch dimension
-img_array = np.expand_dims(img_array, axis=0)  # shape: (1, 512, 512, 3)
 
-# 3. Predict the class
-predictions = model.predict(img_array)
-predicted_class = np.argmax(predictions, axis=1)[0]
+_model = None
 
-print(f"Predicted class: {predicted_class}")
+
+def _load_model():
+    global _model
+    if _model is not None:
+        return _model
+    if not TF_AVAILABLE:
+        raise ImportError(f"TensorFlow or required dependencies not available: {_import_error}")
+    model_path = '../models/20250713_ett_model_30epochs_resnet_cropped.keras'
+    _model = keras.models.load_model(model_path)
+    return _model
+
+
+def classify_png_bytes(png_bytes):
+    """Classify an image provided as PNG bytes. Returns predicted class as int.
+
+    Preprocessing mirrors the original script: resize to 512x512 and ensure 3 channels.
+    """
+    try:
+        model = _load_model()
+    except Exception:
+        # Re-raise to let callers handle fallback
+        raise
+
+    with Image.open(io.BytesIO(png_bytes)) as img:
+        img = img.resize((512, 512))
+        arr = np.array(img)
+
+        if arr.ndim == 2:
+            arr = np.stack([arr] * 3, axis=-1)
+
+        arr = np.expand_dims(arr, axis=0)
+
+        preds = model.predict(arr)
+        predicted_class = int(np.argmax(preds, axis=1)[0])
+        return predicted_class
+

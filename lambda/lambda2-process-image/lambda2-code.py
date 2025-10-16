@@ -208,19 +208,27 @@ def lambda_handler(event, context):
         # Run classifier on the converted image (prefer converted JPEG if available)
         try:
             classifier_input_bytes = None
-            # If we converted from DICOM we have jpeg_data; otherwise, download the object bytes from S3
             if is_dicom_file(key):
-                # Use the converted JPEG we already created
                 classifier_input_bytes = jpeg_data
             else:
-                # Download original object bytes
                 obj = s3_client.get_object(Bucket=bucket, Key=rekognition_key)
                 classifier_input_bytes = obj['Body'].read()
 
             # Convert to PNG, resize and crop
             png_bytes = resize_and_crop_to_png_bytes(classifier_input_bytes)
-            flag_value = run_classifier_on_png(png_bytes)
-            print(f"Classifier returned flag: {flag_value}")
+
+            # Prefer the provided model classifier if available
+            try:
+                from inference.classify_image import classify_png_bytes
+                predicted_class = classify_png_bytes(png_bytes)
+                # Map predicted class to flag (if model outputs 0/1 already, keep it)
+                flag_value = int(predicted_class)
+                print(f"Model classifier returned class: {predicted_class}")
+            except Exception as model_exc:
+                print(f"Model classifier not available or failed: {model_exc}; falling back to heuristic")
+                flag_value = run_classifier_on_png(png_bytes)
+                print(f"Heuristic classifier returned flag: {flag_value}")
+
         except Exception as e:
             print(f"Classifier processing failed: {e}")
             flag_value = 0
