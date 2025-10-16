@@ -1,10 +1,10 @@
 # Lambda Layers
 
-This directory contains scripts and configuration for building Lambda layers with DICOM processing dependencies.
+This directory contains scripts and configuration for building Lambda layers with dependencies for DICOM processing and ML inference.
 
-## What's Included
+## Available Layers
 
-The Lambda layer includes:
+### 1. DICOM Processing Layer (pydicom-layer)
 - **pydicom** (2.4.4) - DICOM file parsing and manipulation
 - **Pillow** (10.3.0) - Image processing
 - **numpy** (1.26.4) - Numerical operations
@@ -12,31 +12,47 @@ The Lambda layer includes:
 - **pylibjpeg-libjpeg** - JPEG baseline decoder
 - **pylibjpeg-openjpeg** - JPEG 2000 decoder
 
-## Building the Layer
+### 2. TensorFlow Layer (tensorflow-layer)
+- **TensorFlow** (2.15.0) - Deep learning framework
+- Includes Keras for model loading and inference
+
+## Building the Layers
 
 ### Prerequisites
 - Docker installed and running
 - Bash shell (Mac/Linux) or Git Bash (Windows)
+- AWS CLI configured
 
-### Build Command
+### Build DICOM Layer
 
 ```bash
-./build-layer.sh
+./build-layer-script.sh
 ```
 
 This will:
 1. Use Docker to install packages for Linux/Lambda environment
 2. Create a `python/` directory with all dependencies
-3. Package everything into `dicom-layer.zip`
+3. Package everything into `dicom-layer.zip` (~65-80 MB)
 4. Clean up temporary files
 
-### Output
+### Build TensorFlow Layer
 
-- **dicom-layer.zip** - Lambda layer package (~65-80 MB)
+```bash
+./build-tensorflow-layer.sh
+```
 
-## Deploying the Layer
+This will:
+1. Use Docker to install TensorFlow for Linux/Lambda environment
+2. Create a `python/` directory with TensorFlow and dependencies
+3. Remove unnecessary files (tests, cache) to reduce size
+4. Package everything into `tensorflow-layer.zip` (~300-400 MB)
+5. Clean up temporary files
 
-### Option 1: Via S3 (Recommended for large files)
+**Note**: TensorFlow layer is large and may take 10-15 minutes to build.
+
+## Deploying the Layers
+
+### Deploy DICOM Layer
 
 ```bash
 # Upload to S3
@@ -51,27 +67,48 @@ aws lambda publish-layer-version \
     --compatible-architectures x86_64
 ```
 
-### Option 2: Direct Upload (if < 50MB)
+### Deploy TensorFlow Layer
 
 ```bash
+# Upload to S3 (required due to size)
+aws s3 cp tensorflow-layer.zip s3://YOUR-BUCKET/layers/
+
+# Create Lambda layer
 aws lambda publish-layer-version \
-    --layer-name pydicom-layer \
-    --description "PyDICOM, Pillow, and NumPy for DICOM processing" \
-    --zip-file fileb://dicom-layer.zip \
+    --layer-name tensorflow-layer \
+    --description "TensorFlow 2.15.0 for ML inference" \
+    --content S3Bucket=YOUR-BUCKET,S3Key=layers/tensorflow-layer.zip \
     --compatible-runtimes python3.12 \
     --compatible-architectures x86_64
 ```
 
-## Attaching to Lambda Function
+## Attaching Layers to Lambda Function
+
+### Attach Both Layers (Recommended)
 
 ```bash
-# Get layer ARN from previous command output
-LAYER_ARN="arn:aws:lambda:us-east-1:ACCOUNT-ID:layer:pydicom-layer:1"
+# Get layer ARNs from previous command outputs
+PYDICOM_LAYER="arn:aws:lambda:REGION:ACCOUNT:layer:pydicom-layer:VERSION"
+TENSORFLOW_LAYER="arn:aws:lambda:REGION:ACCOUNT:layer:tensorflow-layer:VERSION"
 
-# Attach to Lambda function
+# Attach both layers to processImage function
 aws lambda update-function-configuration \
     --function-name processImage \
-    --layers $LAYER_ARN
+    --layers $PYDICOM_LAYER $TENSORFLOW_LAYER
+
+# Increase memory and timeout for TensorFlow inference
+aws lambda update-function-configuration \
+    --function-name processImage \
+    --memory-size 2048 \
+    --timeout 300
+```
+
+### Attach Only DICOM Layer
+
+```bash
+aws lambda update-function-configuration \
+    --function-name processImage \
+    --layers arn:aws:lambda:REGION:ACCOUNT:layer:pydicom-layer:VERSION
 ```
 
 ## Troubleshooting
@@ -118,7 +155,9 @@ pip install --target python pydicom==2.4.4 pillow==10.3.0 numpy==1.26.4 ...
 pip install --target python pydicom==NEW_VERSION pillow==NEW_VERSION ...
 ```
 
-## Testing the Layer
+## Testing the Layers
+
+### Test DICOM Layer
 
 Create a test Lambda function:
 
@@ -130,7 +169,7 @@ def lambda_handler(event, context):
         import pydicom
         import PIL
         import numpy
-        
+
         return {
             'statusCode': 200,
             'body': json.dumps({
@@ -146,4 +185,42 @@ def lambda_handler(event, context):
         }
 ```
 
-Attach the layer and test to verify all packages load correctly.
+### Test TensorFlow Layer
+
+```python
+import json
+
+def lambda_handler(event, context):
+    try:
+        import tensorflow as tf
+
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'tensorflow': tf.__version__,
+                'keras': tf.keras.__version__
+            })
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+```
+
+Attach the layers and test to verify all packages load correctly.
+
+## Using TensorFlow with Your Keras Model
+
+To use the trained model (`models/20250713_ett_model_30epochs_resnet_cropped.keras`) in Lambda:
+
+1. Upload the model to S3:
+```bash
+aws s3 cp models/20250713_ett_model_30epochs_resnet_cropped.keras s3://YOUR-BUCKET/models/
+```
+
+2. Modify Lambda2 to download and use the model (see integration guide below)
+
+3. Ensure Lambda has sufficient memory (2048+ MB) and timeout (300s)
+
+For detailed integration instructions, see the integration guide in the docs folder.
