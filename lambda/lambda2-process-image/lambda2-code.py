@@ -206,6 +206,7 @@ def lambda_handler(event, context):
         results = convert_floats_to_decimals(response)
 
         # Run classifier on the converted image (prefer converted JPEG if available)
+        cropped_image_url = None
         try:
             classifier_input_bytes = None
             if is_dicom_file(key):
@@ -216,6 +217,26 @@ def lambda_handler(event, context):
 
             # Convert to PNG, resize and crop
             png_bytes = resize_and_crop_to_png_bytes(classifier_input_bytes)
+
+            # Save cropped PNG to S3
+            cropped_key = f"cropped/{job_id}/cropped.png"
+            s3_client.put_object(
+                Bucket=bucket,
+                Key=cropped_key,
+                Body=png_bytes,
+                ContentType='image/png'
+            )
+            print(f"Saved cropped image to: {cropped_key}")
+
+            # Generate presigned URL for the cropped image
+            cropped_image_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': bucket,
+                    'Key': cropped_key
+                },
+                ExpiresIn=3600
+            )
 
             # Prefer the provided model classifier if available
             try:
@@ -254,6 +275,12 @@ def lambda_handler(event, context):
             update_expression += ', #imageUrl = :imageUrl'
             expression_names['#imageUrl'] = 'imageUrl'
             expression_values[':imageUrl'] = image_url
+
+        # Add croppedImageUrl if available
+        if cropped_image_url:
+            update_expression += ', #croppedImageUrl = :croppedImageUrl'
+            expression_names['#croppedImageUrl'] = 'croppedImageUrl'
+            expression_values[':croppedImageUrl'] = cropped_image_url
 
         table.update_item(
             Key={'jobId': job_id},

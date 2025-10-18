@@ -4,13 +4,13 @@ FROM public.ecr.aws/lambda/python:3.12
 RUN dnf install -y libgomp && dnf clean all
 
 # Copy requirements file
-COPY requirements.txt .
+COPY lambda/lambda2-process-image/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy Lambda function code
-COPY lambda2-code.py ${LAMBDA_TASK_ROOT}/
+COPY lambda/lambda2-process-image/lambda2-code.py ${LAMBDA_TASK_ROOT}/
 
 # Copy inference module
 COPY inference/ ${LAMBDA_TASK_ROOT}/inference/

@@ -78,6 +78,7 @@ def lambda_handler(event, context):
             'status': item['status'],
             'results': results,
             'imageUrl': item.get('imageUrl'),
+            'croppedImageUrl': item.get('croppedImageUrl'),
             'flag': flag_out,
             'error': item.get('error')
         }

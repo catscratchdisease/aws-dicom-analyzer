@@ -196,6 +196,27 @@
         .btn-reset:hover {
             background: #764ba2;
         }
+
+        .cropped-image-container {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9ff;
+            border-radius: 8px;
+            border: 2px solid #667eea;
+        }
+
+        .cropped-image-container h3 {
+            color: #667eea;
+            font-size: 16px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .cropped-image-container img {
+            max-width: 100%;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
     </style>
 </head>
 <body>
@@ -452,22 +473,33 @@
         function displayResults(results) {
             showStatus('Analysis complete!', 'complete');
 
-            // Support both legacy shape (results object) and new shape { status, results, flag, imageUrl }
+            // Support both legacy shape (results object) and new shape { status, results, flag, imageUrl, croppedImageUrl }
             const resp = results && results.results !== undefined ? results : { results };
             const resultsObj = resp.results || resp;
             const flag = resp.flag;
+            const croppedImageUrl = resp.croppedImageUrl;
 
             // Clear existing list
             detectionsList.innerHTML = '';
 
+            // Display cropped image if available
+            if (croppedImageUrl) {
+                detectionsList.innerHTML += `
+                    <div class="cropped-image-container">
+                        <h3>📐 Cropped Region (Used for Classification)</h3>
+                        <img src="${croppedImageUrl}" alt="Cropped image used for classification">
+                    </div>
+                `;
+            }
+
             // Display classifier flag if present
             if (flag !== undefined && flag !== null) {
-                const statusText = (flag === 1 || flag === '1' || flag === true) ? 'Detected' : 'Not detected';
-                const bgColor = (flag === 1 || flag === '1' || flag === true) ? '#e8f5e9' : '#fff3e0';
-                const borderColor = (flag === 1 || flag === '1' || flag === true) ? '#4caf50' : '#ff9800';
+                const statusText = (flag === 0 || flag === '0') ? 'Detected' : 'Not detected';
+                const bgColor = (flag === 0 || flag === '0') ? '#e8f5e9' : '#fff3e0';
+                const borderColor = (flag === 0 || flag === '0') ? '#4caf50' : '#ff9800';
                 detectionsList.innerHTML += `<div class="detection-item" style="background: ${bgColor}; border-left: 4px solid ${borderColor};">
                     <span class="detection-label">Endotracheal tube</span>
-                    <span class="detection-confidence">${statusText}</span>
+                    <span class="detection-confidence">${statusText} (class ${flag})</span>
                 </div>`;
             }
 
